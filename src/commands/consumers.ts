@@ -50,15 +50,18 @@ export class StartConsumerCommandHandler {
 
         this.consumerCollection.create(consumeUri);
         this.explorer.refresh();
-        const doc = await vscode.workspace.openTextDocument(consumeUri);
+
+
+
+        /*const doc = await vscode.workspace.openTextDocument(consumeUri);
         await vscode.window.showTextDocument(
             doc,
             {
                 preview: false,
                 preserveFocus: true,
                 viewColumn: vscode.ViewColumn.Beside,
-            });
-        await vscode.languages.setTextDocumentLanguage(doc, "kafka-consumer");
+            });*/
+        //await vscode.languages.setTextDocumentLanguage(doc, "kafka-consumer");
     }
 }
 

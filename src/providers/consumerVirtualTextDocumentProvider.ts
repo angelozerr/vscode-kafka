@@ -47,12 +47,27 @@ export class ConsumerVirtualTextDocumentProvider implements vscode.TextDocumentC
         if (consumer === null) {
             return;
         }
+        const writeEmitter = new vscode.EventEmitter<string>();
+
+        const pty = {
+			onDidWrite: writeEmitter.event,
+			open: () => writeEmitter.fire('Type and press enter to echo the text\r\n\r\n'),
+			close: () => { /* noop*/consumer.dispose() },
+		};
+        const terminal = (<any>vscode.window).createTerminal({ name: `My Extension REPL`, pty });
+		terminal.show();
 
         this.disposables.push(consumer.onDidReceiveRecord((arg: any) => {
-            this.onDidReceiveRecord(arg.uri, arg.record);
+            let message = arg.record;
+            writeEmitter.fire(`Key: ${message.key}\r\n`);
+            writeEmitter.fire(`Partition: ${message.partition}\r\n`);
+            writeEmitter.fire(`Offset: ${message.offset}\r\n`);
+            writeEmitter.fire(`Value:\n${message.value}\r\n`);
+//            this.onDidReceiveRecord(arg.uri, arg.record);
         }));
 
         this.disposables.push(consumer.onDidChangeStatus((arg: any) => {
+            writeEmitter.fire('Status' + arg.status);
             this.onDidChangeStatus(arg.uri, arg.status);
         }));
     }

@@ -18,12 +18,13 @@ import {
 } from "./commands";
 import { Context } from "./context";
 import { BrokerItem, KafkaExplorer, TopicItem } from "./explorer";
-import { ConsumerVirtualTextDocumentProvider, OutputChannelProvider, ProducerCodeLensProvider } from "./providers";
+import { OutputChannelProvider, ProducerCodeLensProvider } from "./providers";
 import { getClusterSettings, getWorkspaceSettings } from "./settings";
 import { ClusterItem } from "./explorer/models/cluster";
 import { TopicGroupItem } from "./explorer/models/topics";
 import { ConsumerStatusBarItem } from "./views/consumerStatusBarItem";
 import { SelectedClusterStatusBarItem } from "./views/selectedClusterStatusBarItem";
+import { ConsumerTerminalRegistry } from "./terminal/consumerTerminalRegistry";
 
 export function activate(context: vscode.ExtensionContext): void {
     Context.register(context);
@@ -113,9 +114,11 @@ export function activate(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
         vscode.languages.registerCodeLensProvider(documentSelector, new ProducerCodeLensProvider()));
 
-    context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(
-        ConsumerVirtualTextDocumentProvider.SCHEME,
-        new ConsumerVirtualTextDocumentProvider(consumerCollection)));
+    //context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(
+    //    ConsumerVirtualTextDocumentProvider.SCHEME,
+    //    new ConsumerVirtualTextDocumentProvider(consumerCollection)));
+
+    context.subscriptions.push(new ConsumerTerminalRegistry(consumerCollection, outputChannelProvider));
 }
 
 export function deactivate(): void {
