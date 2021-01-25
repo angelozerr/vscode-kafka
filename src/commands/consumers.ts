@@ -1,25 +1,29 @@
 import * as vscode from "vscode";
 
-import { ConsumerCollection, Topic, ClientAccessor } from "../client";
 import { pickClient, pickConsumerGroupId, pickTopic } from "./common";
+import { ConsumerCollection, ClientAccessor, createConsumerUri, ConsumerInfoUri, parsePartitions } from "../client";
 import { KafkaExplorer } from "../explorer";
 import { ConsumerVirtualTextDocumentProvider } from "../providers";
 
-export interface StartConsumerCommand {
-    clusterId: string;
-    topic: Topic;
+export interface LaunchConsumerCommand extends ConsumerInfoUri {
+    consumerGroupId?: string;
 }
 
-export class StartConsumerCommandHandler {
+/**
+ * Start or stop a consumer.
+ */
+abstract class LaunchConsumerCommandHandler {
+
     constructor(
         private clientAccessor: ClientAccessor,
         private consumerCollection: ConsumerCollection,
-        private explorer: KafkaExplorer
+        private explorer: KafkaExplorer,
+        private start: boolean
     ) {
     }
 
-    async execute(startConsumerCommand?: StartConsumerCommand): Promise<void> {
-        if (!startConsumerCommand) {
+    async execute(command?: LaunchConsumerCommand): Promise<void> {
+        if (!command) {
             const client = await pickClient(this.clientAccessor);
             if (!client) {
                 return;
@@ -31,28 +35,83 @@ export class StartConsumerCommandHandler {
                 return;
             }
 
-            startConsumerCommand = {
-                topic,
+            command = {
+                topicId: topic.id,
                 clusterId: client.cluster.id,
             };
         }
 
-        const consumeUri = vscode.Uri.parse(`kafka:${startConsumerCommand.clusterId}/${startConsumerCommand.topic.id}`);
-
-        if (this.consumerCollection.has(consumeUri)) {
-            vscode.window.showInformationMessage(`Consumer already started on '${startConsumerCommand.topic.id}'`);
-        } else {
-            this.consumerCollection.create(consumeUri);
-            this.explorer.refresh();
+        const consumeUri = createConsumerUri(command);
+        try {
+            validatePartitions(command.partitions);
+            validateOffset(command.fromOffset);
+            if (this.consumerCollection.has(consumeUri)) {
+                if (this.start) {
+                    vscode.window.showInformationMessage(`Consumer already started on '${command.topicId}'`);
+                } else {
+                    this.consumerCollection.close(consumeUri);
+                    this.explorer.refresh();
+                }
+            } else {
+                if (this.start) {
+                    this.consumerCollection.create(consumeUri, command.consumerGroupId);
+                }
+                this.explorer.refresh();
+            }
+            return openDocument(consumeUri);
         }
+        catch (e) {
+            vscode.window.showErrorMessage(`Error while ${this.start ? 'starting' : 'stopping'} the consumer: ${e.message}`);
+        }
+    }
+}
 
-        return openDocument(consumeUri);
+export class StartConsumerCommandHandler extends LaunchConsumerCommandHandler {
+
+    public static commandID = 'vscode-kafka.consumer.start';
+
+    constructor(
+        clientAccessor: ClientAccessor,
+        consumerCollection: ConsumerCollection,
+        explorer: KafkaExplorer
+    ) {
+        super(clientAccessor, consumerCollection, explorer, true);
+    }
+}
+
+export class StopConsumerCommandHandler extends LaunchConsumerCommandHandler {
+
+    public static commandId = 'vscode-kafka.consumer.stop';
+
+    constructor(
+        clientAccessor: ClientAccessor,
+        consumerCollection: ConsumerCollection,
+        explorer: KafkaExplorer
+    ) {
+        super(clientAccessor, consumerCollection, explorer, false);
+    }
+}
+
+function validatePartitions(partitions?: string) {
+    if (!partitions) {
+        return;
+    }
+    parsePartitions(partitions);
+}
+
+function validateOffset(offset?: string) {
+    if (!offset || offset === 'earliest' || offset === 'latest') {
+        return;
+    }
+    const valueAsNumber = parseInt(offset, 10);
+    if (isNaN(valueAsNumber) || valueAsNumber < 0) {
+        throw new Error(`from must be a number or equals to 'earliest', 'latest'.`);
     }
 }
 
 export class ToggleConsumerCommandHandler {
 
-    public static COMMAND_ID = 'vscode-kafka.consumer.toggle';
+    public static commandId = 'vscode-kafka.consumer.toggle';
 
     constructor(private consumerCollection: ConsumerCollection) {
     }
@@ -76,7 +135,7 @@ export class ToggleConsumerCommandHandler {
 }
 export class ClearConsumerViewCommandHandler {
 
-    public static COMMAND_ID = 'vscode-kafka.consumer.clear';
+    public static commandId = 'vscode-kafka.consumer.clear';
 
     constructor(private provider: ConsumerVirtualTextDocumentProvider) {
 
@@ -120,7 +179,7 @@ export class ListConsumersCommandHandler {
         const consumers = this.consumerCollection.getAll();
         const consumerQuickPickItems = consumers.map((c) => {
             return {
-                label: c.options.topic,
+                label: c.options.topicId,
                 description: c.options.bootstrap,
                 uri: c.uri,
             };
@@ -157,7 +216,7 @@ export interface DeleteConsumerGroupCommand {
 
 export class DeleteConsumerGroupCommandHandler {
 
-    public static COMMAND_ID = 'vscode-kafka.consumer.deletegroup';
+    public static commandId = 'vscode-kafka.consumer.deletegroup';
 
     constructor(
         private clientAccessor: ClientAccessor,

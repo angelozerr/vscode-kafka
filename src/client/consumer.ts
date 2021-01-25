@@ -1,4 +1,5 @@
-import { Kafka, Consumer as KafkaJsConsumer } from "kafkajs";
+import { Kafka, Consumer as KafkaJsConsumer, PartitionAssigner, Assignment, PartitionAssigners, AssignerProtocol } from "kafkajs";
+import { URLSearchParams } from "url";
 
 import * as vscode from "vscode";
 
@@ -6,9 +7,10 @@ import { getWorkspaceSettings, InitialConsumerOffset, ClusterSettings } from "..
 import { ConnectionOptions, createKafka } from "./client";
 
 interface ConsumerOptions extends ConnectionOptions {
-    clusterId: string;
-    fromOffset: InitialConsumerOffset;
-    topic: string;
+    consumerGroupId: string;
+    topicId: string;
+    fromOffset: InitialConsumerOffset | string;
+    partitions?: number[];
 }
 
 export interface RecordReceivedEvent {
@@ -47,21 +49,23 @@ class Consumer implements vscode.Disposable {
 
     public options: ConsumerOptions;
 
-    constructor(public uri: vscode.Uri, clusterSettings: ClusterSettings) {
-        const parsedUri = this.parseUri(uri);
-        const cluster = clusterSettings.get(parsedUri.clusterId);
+    constructor(public uri: vscode.Uri, clusterSettings: ClusterSettings, consumerGroupId?: string) {
+        const parsedUri = extractConsumerInfoUri(uri);
+        const clusterId = parsedUri.clusterId;
+        const cluster = clusterSettings.get(clusterId);
 
         if (!cluster) {
-            throw new Error(`Cannot create consumer, unknown cluster ${parsedUri.clusterId}`);
+            throw new Error(`Cannot create consumer, unknown cluster ${clusterId}`);
         }
-
+        const topicId = parsedUri.topicId;
         const settings = getWorkspaceSettings();
         this.options = {
-            clusterId: cluster.id,
-            fromOffset: settings.consumerOffset,
             bootstrap: cluster.bootstrap,
-            topic: parsedUri.topic,
             saslOption: cluster.saslOption,
+            consumerGroupId: consumerGroupId || `vscode-kafka-${clusterId}-${topicId}`,
+            topicId,
+            fromOffset: parsedUri.fromOffset || settings.consumerOffset,
+            partitions: parsePartitions(parsedUri.partitions)
         };
     }
 
@@ -70,29 +74,99 @@ class Consumer implements vscode.Disposable {
      * Received messages and/or errors are emitted via events.
      */
     async start(): Promise<void> {
-        this.kafkaClient = createKafka(this.options);
-        this.consumer = this.kafkaClient.consumer({ groupId: `vscode-kafka-${this.options.clusterId}-${this.options.topic}`, retry: { retries: 3 }});
-        await this.consumer.connect();
-        await this.consumer.subscribe({ topic: this.options.topic, fromBeginning: this.options.fromOffset ===  "earliest" });
+        const partitions = this.options.partitions;
+        const partitionAssigner = this.getPartitionAssigner(partitions);
+        const fromOffset = this.options.fromOffset;
+        const topic = this.options.topicId;
 
-        await this.consumer.run({
-            eachMessage: async ({ topic , partition, message }) => {
+        this.kafkaClient = createKafka(this.options);
+        this.consumer = this.kafkaClient.consumer({
+            groupId: this.options.consumerGroupId, retry: { retries: 3 },
+            partitionAssigners: [
+                partitionAssigner
+            ]
+        });
+        await this.consumer.connect();
+
+        const subscribeOptions = this.createSubscribeOptions(topic, fromOffset);
+        await this.consumer.subscribe(subscribeOptions);
+
+        this.consumer.run({
+            eachMessage: async ({ topic, partition, message }) => {
                 this.onDidReceiveMessageEmitter.fire({
                     uri: this.uri,
                     record: { topic: topic, partition: partition, ...message },
                 });
             },
         });
+
+        if (partitions || (fromOffset && subscribeOptions.fromBeginning === undefined)) {
+            const offset = fromOffset || '0';
+            const definedPartitions = await this.getPartitions(topic, partitions);
+            for (let i = 0; i < definedPartitions.length; i++) {
+                const partition = definedPartitions[i];
+                this.consumer.seek({ topic, partition, offset });
+            }
+        }
     }
 
-    private parseUri(uri: vscode.Uri): { clusterId: string; topic: string; partition?: string} {
-        const [clusterId, topic, partition] = uri.path.split("/");
+    private async getPartitions(topic: string, partitions?: number[]): Promise<number[]> {
+        if (partitions) {
+            // returns the customized partitions
+            return partitions;
+        }
+        // returns the topics partitions
+        const partitionMetadata = await this.kafkaClient?.admin().fetchTopicMetadata({ topics: [topic] });
+        return partitionMetadata?.topics[0].partitions.map(m => m.partitionId) || [0];
+    }
 
-        return {
-            clusterId,
-            topic,
-            partition,
-        };
+    private getPartitionAssigner(partitions?: number[]): PartitionAssigner {
+        if (!partitions) {
+            return PartitionAssigners.roundRobin;
+        }
+        const userData = Buffer.alloc(0);
+        return ({ cluster }) => ({
+            name: 'AssignedPartitionsAssigner',
+            version: 1,
+            async assign({ members, topics }) {
+                const sortedMembers = members.map(({ memberId }) => memberId).sort();
+                const firstMember = sortedMembers[0];
+                const assignment = {
+                    [firstMember]: {} as Assignment,
+                };
+
+                topics.forEach(topic => {
+                    assignment[firstMember][topic] = partitions;
+                });
+
+                return Object.keys(assignment).map(memberId => ({
+                    memberId,
+                    memberAssignment: AssignerProtocol.MemberAssignment.encode({
+                        version: this.version,
+                        assignment: assignment[memberId],
+                        userData,
+                    }),
+                }));
+            },
+            protocol({ topics }) {
+                return {
+                    name: this.name,
+                    metadata: AssignerProtocol.MemberMetadata.encode({
+                        version: this.version,
+                        topics,
+                        userData,
+                    })
+                };
+            }
+        });
+    }
+
+    private createSubscribeOptions(topic: string, fromOffset?: string): { topic: string, fromBeginning?: boolean } {
+        if (fromOffset === "earliest" || fromOffset === "latest") {
+            const fromBeginning = fromOffset === "earliest";
+            return { topic, fromBeginning };
+        }
+        return { topic };
     }
 
     dispose(): void {
@@ -121,8 +195,8 @@ export class ConsumerCollection implements vscode.Disposable {
     /**
      * Creates a new consumer for a provided uri.
      */
-    create(uri: vscode.Uri): Consumer {
-        const consumer = new Consumer(uri, this.clusterSettings);
+    create(uri: vscode.Uri, consumerGroupId?: string): Consumer {
+        const consumer = new Consumer(uri, this.clusterSettings, consumerGroupId);
         this.consumers[uri.toString()] = consumer;
         consumer.start();
 
@@ -172,7 +246,7 @@ export class ConsumerCollection implements vscode.Disposable {
         consumer.dispose();
         delete this.consumers[uri.toString()];
 
-        this.onDidChangeCollectionEmitter.fire({ created: [], closed: [uri]});
+        this.onDidChangeCollectionEmitter.fire({ created: [], closed: [uri] });
     }
 
     /**
@@ -195,4 +269,92 @@ export class ConsumerCollection implements vscode.Disposable {
 
         this.consumers = {};
     }
+}
+
+// ---------- Consumer URI utilities
+
+export interface ConsumerInfoUri {
+    clusterId: string;
+    topicId: InitialConsumerOffset | string;
+    fromOffset?: string;
+    partitions?: string;
+}
+
+const FROM_QUERY_PARAMETER = 'from';
+const PARTITIONS_QUERY_PARAMETER = 'partitions';
+
+export function createConsumerUri(info: ConsumerInfoUri): vscode.Uri {
+    const path = `kafka:${info.clusterId}/${info.topicId}`;
+    let query = '';
+    query = addQueryParameter(query, FROM_QUERY_PARAMETER, info.fromOffset);
+    query = addQueryParameter(query, PARTITIONS_QUERY_PARAMETER, info.partitions);
+    return vscode.Uri.parse(path + query);
+}
+
+function addQueryParameter(query: string, name: string, value?: string): string {
+    if (value === undefined) {
+        return query;
+    }
+    return `${query}${query.length > 0 ? '&' : '?'}${name}=${value}`;
+}
+
+export function extractConsumerInfoUri(uri: vscode.Uri): ConsumerInfoUri {
+    const [clusterId, topicId] = uri.path.split("/");
+    let from: string | null = null;
+    let partitions: string | null = null;
+    if (uri.query.length > 0) {
+        const urlParams = new URLSearchParams(uri.query);
+        from = urlParams.get(FROM_QUERY_PARAMETER);
+        partitions = urlParams.get(PARTITIONS_QUERY_PARAMETER);
+    }
+    return {
+        clusterId,
+        topicId,
+        fromOffset: from && from.trim().length > 0 ? from : undefined,
+        partitions: partitions && partitions.trim().length > 0 ? partitions : undefined
+    };
+}
+
+export function parsePartitions(partitions?: string): number[] | undefined {
+    partitions = partitions?.trim();
+    if (partitions && partitions.length > 0) {
+        let from: string | undefined = undefined;
+        let to: string | undefined = undefined;
+        const result = new Set<number>();
+        const add = function (from: string | undefined, to: string | undefined) {
+            if (!from) {
+                return;
+            }
+            const fromAsNumber = parseInt(from, 10);
+            const toAsNumber = to ? parseInt(to, 10) : fromAsNumber;
+            for (let i = fromAsNumber; i <= toAsNumber; i++) {
+                result.add(i);
+            }
+        };
+        for (let i = 0; i < partitions.length; i++) {
+            const c = partitions.charAt(i);
+            if (c === ' ') {
+                continue;
+            } else if (c === ',') {
+                add(from, to);
+                from = undefined;
+                to = undefined;
+            } else if (c === '-') {
+                to = '';
+            } else if (!isNaN(parseInt(c, 10))) {
+                if (to !== undefined) {
+                    to += c;
+                } else {
+                    from = from || '';
+                    from += c;
+                }
+            } else {
+                throw new Error(`Unexpected character '${c}' in partitions expression.`);
+            }
+        }
+        add(from, to);
+        // returns sorted and distinct partitions
+        return result.size > 0 ? Array.from(result).sort() : undefined;
+    }
+    return undefined;
 }

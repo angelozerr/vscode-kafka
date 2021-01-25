@@ -3,6 +3,7 @@
 Consuming topics can be done:
 
 * from the [Kafka Explorer](#kafka-explorer), by right-clicking on a topic and selecting "Start Consumer".
+* from [Kafka file](#kafka-file) by clicking on `Start consumer` / `Stop consumer` codelens available from `CONSUMER` block.
 * from the [Start Consumer](#start-consumer-command), from the command palette.
 
 ## Consume with ...
@@ -23,6 +24,38 @@ Known limitations:
 
 * UTF-8 encoded keys and values only. If data is encoded differently, it will not be pretty.
 * One consumer group is created per topic (may change in the future to just have one for the extension).
+
+### Kafka file
+
+Consumming can be done by creating a [.kafka](KafkaFile.md#kafkafile) file. Write simple consumer using the following format:
+
+```
+CONSUMER consumer-group-id
+topic: json-events
+partitions: 0
+from: 1
+```
+
+For actually consuming the topic, click on the `Start consumer` link above the `CONSUMER` line:
+
+![Start Consumer with Kafka file](assets/start-consumer-from-kafkafile.png)
+
+The CONSUMER block specifies : 
+
+ * the `consumer group id` which is declared after CONSUMER (optional).
+ * the `topic` id (required).
+ * the `from` offset which can takes `earliest`, `latest` or a `number` as value (optional).
+ * the `partitions` which is a number or a range, or a combinaison of ranges (optional). Example: 
+    * 0
+    * 0,1,2
+    * 0-2
+    * 0,2-3
+
+A codelens is displayed above each `CONSUMER` line to show the `status` of the consumer (started / stopped).and provides `Start consumer` / `Stop consumer` commands according to the status
+
+To write quickly a CONSUMER, completion snippets for consumer will help you:
+
+![Consumer snippets](assets/kafka-file-consumer-snippet.png)
 
 ### Start Consumer command
 

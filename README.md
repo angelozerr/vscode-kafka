@@ -56,13 +56,22 @@ topic: json-events
 }
 ```
 
-![Screenshot-4](docs/assets/screen-4.png)
+![Producers](docs/assets/kafka-file-producers.png)
 
 See [Producing messages](https://github.com/jlandersen/vscode-kafka/blob/master/docs/Producing.md) section for more informations.
 
 ## Consuming messages
 
-Consuming topics can be done by right clicking a topic in the explorer or from the command palette.  
+Consuming topics can be done by right clicking a topic in the explorer, from the command palette or creating a `.kafka` file:
+
+```
+CONSUMER consumer-group-id
+topic: json-events
+partitions: 0
+from: 1
+```
+
+![Start Consumer with Kafka file](docs/assets/start-consumer-from-kafkafile.png)
 
 See [Consuming messages](https://github.com/jlandersen/vscode-kafka/blob/master/docs/Consuming.md) section for more informations.
 

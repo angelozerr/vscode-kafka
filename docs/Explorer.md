@@ -8,6 +8,16 @@ The Kafka explorer shows configured clusters with their topics, brokers, consume
 
 ![Screenshot-3](assets/screen-3.png)
 
+## Cluster Item
+
+The explorer shows clusters, click on right button on cluster provides several menu items.
+
+### Select Cluster
+
+Before using a [.kafka file](KafkaFile.md#kafkafile) you must select the cluster. You can do that with the `Select cluster` menu item:
+
+![Select cluster](assets/kafka-explorer-select-cluster.png)
+
 ## Actions
 
 ### Copy Label

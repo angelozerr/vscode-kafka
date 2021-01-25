@@ -11,6 +11,8 @@ All notable changes to Kafka extension will be documented in this file.
 - Added the option to enable basic SSL support for clusters without authentication. See [#84](https://github.com/jlandersen/vscode-kafka/issues/84).
 - The consumer view now provides a `Clear Consumer View` command. See [#84](https://github.com/jlandersen/vscode-kafka/issues/40).
 - Added support for consumer group deletion. See [#26](https://github.com/jlandersen/vscode-kafka/issues/26).
+- Kafka file can declare `CONSUMER` to start consumer with a given offset, partition. See [#96](https://github.com/jlandersen/vscode-kafka/issues/96).
+- Kafka file shows the selected cluster as codelens. See [#102](https://github.com/jlandersen/vscode-kafka/issues/102).
 
 ### Changed
 - Improved the "New cluster" and "New topic" wizards: now include validation and a back button. See [#21](https://github.com/jlandersen/vscode-kafka/issues/21).
