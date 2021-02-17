@@ -47,22 +47,23 @@ class Consumer implements vscode.Disposable {
     public onDidReceiveError = this.onDidReceiveErrorEmitter.event;
     public onDidChangeStatus = this.onDidChangeStatusEmitter.event;
 
+    public clusterId : string;
     public options: ConsumerOptions;
 
     constructor(public uri: vscode.Uri, clusterSettings: ClusterSettings, consumerGroupId?: string) {
         const parsedUri = extractConsumerInfoUri(uri);
-        const clusterId = parsedUri.clusterId;
-        const cluster = clusterSettings.get(clusterId);
+        this.clusterId = parsedUri.clusterId;
+        const cluster = clusterSettings.get(this.clusterId);
 
         if (!cluster) {
-            throw new Error(`Cannot create consumer, unknown cluster ${clusterId}`);
+            throw new Error(`Cannot create consumer, unknown cluster ${this.clusterId}`);
         }
         const topicId = parsedUri.topicId;
         const settings = getWorkspaceSettings();
         this.options = {
             bootstrap: cluster.bootstrap,
             saslOption: cluster.saslOption,
-            consumerGroupId: consumerGroupId || `vscode-kafka-${clusterId}-${topicId}`,
+            consumerGroupId: consumerGroupId || `vscode-kafka-${this.clusterId}-${topicId}`,
             topicId,
             fromOffset: parsedUri.fromOffset || settings.consumerOffset,
             partitions: parsePartitions(parsedUri.partitions)
@@ -224,6 +225,10 @@ export class ConsumerCollection implements vscode.Disposable {
         }
 
         return this.consumers[uri.toString()];
+    }
+
+    getByConsumerGroupId(clusterId: string, consumerGroupId: string) : Consumer[] {
+        return this.getAll().filter(c => clusterId === c.clusterId && c.options.consumerGroupId === consumerGroupId);
     }
 
     /**

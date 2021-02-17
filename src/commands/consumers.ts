@@ -41,24 +41,36 @@ abstract class LaunchConsumerCommandHandler {
             };
         }
 
-        const consumeUri = createConsumerUri(command);
         try {
-            validatePartitions(command.partitions);
-            validateOffset(command.fromOffset);
-            if (this.consumerCollection.has(consumeUri)) {
-                if (this.start) {
+            if (this.start) {
+                const consumeUri = createConsumerUri(command);
+
+                validatePartitions(command.partitions);
+                validateOffset(command.fromOffset);
+
+                if (this.consumerCollection.has(consumeUri)) {
                     vscode.window.showInformationMessage(`Consumer already started on '${command.topicId}'`);
                 } else {
-                    this.consumerCollection.close(consumeUri);
+                    this.consumerCollection.create(consumeUri, command.consumerGroupId);
+                    openDocument(consumeUri);
                     this.explorer.refresh();
                 }
             } else {
-                if (this.start) {
-                    this.consumerCollection.create(consumeUri, command.consumerGroupId);
+                if (command.consumerGroupId) {
+                    const consumers = this.consumerCollection.getByConsumerGroupId(command.clusterId, command.consumerGroupId);
+                    for (let i = 0; i < consumers.length; i++) {
+                        const consumer = consumers[i];
+                        const consumeUri = consumer.uri;
+                        this.consumerCollection.close(consumeUri);
+                        openDocument(consumeUri);
+                    }
+                } else {
+                    const consumeUri = createConsumerUri(command);
+                    this.consumerCollection.close(consumeUri);
+                    openDocument(consumeUri);
                 }
                 this.explorer.refresh();
             }
-            return openDocument(consumeUri);
         }
         catch (e) {
             vscode.window.showErrorMessage(`Error while ${this.start ? 'starting' : 'stopping'} the consumer: ${e.message}`);
@@ -77,6 +89,7 @@ export class StartConsumerCommandHandler extends LaunchConsumerCommandHandler {
     ) {
         super(clientAccessor, consumerCollection, explorer, true);
     }
+
 }
 
 export class StopConsumerCommandHandler extends LaunchConsumerCommandHandler {

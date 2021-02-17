@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { ConsumerCollection, ConsumerCollectionChangedEvent, createConsumerUri } from "../client";
+import { ConsumerCollection, ConsumerCollectionChangedEvent } from "../client";
 import { LaunchConsumerCommand, StartConsumerCommandHandler, StopConsumerCommandHandler, ProduceRecordCommand, ProduceRecordCommandHandler, SelectClusterCommandHandler } from "../commands";
 import { ClusterSettings } from "../settings";
 
@@ -164,8 +164,7 @@ export class KafkaFileCodeLensProvider implements vscode.CodeLensProvider, vscod
 
     private createConsumerLens(lineRange: vscode.Range, range: vscode.Range, document: vscode.TextDocument): vscode.CodeLens[] {
         const launchCommand = this.createLaunchConsumerCommand(document, range, this.clusterSettings.selected?.id);
-        const consumeUri = createConsumerUri(launchCommand);
-        const started = this.consumerCollection.has(consumeUri);
+        const started = this.isConsumerGroupStarted(launchCommand);
         const status = started ? '$(check)' : '$(x)';
         if (!started) {
             return [
@@ -189,6 +188,13 @@ export class KafkaFileCodeLensProvider implements vscode.CodeLensProvider, vscod
                 command: StopConsumerCommandHandler.commandId,
                 arguments: [launchCommand]
             })];
+    }
+    isConsumerGroupStarted(launchCommand: LaunchConsumerCommand): boolean {
+        const { clusterId, consumerGroupId } = launchCommand;
+        if (!consumerGroupId) {
+            return false;
+        }
+        return this.consumerCollection.getByConsumerGroupId(clusterId, consumerGroupId).length > 0;
     }
 
     private createLaunchConsumerCommand(document: vscode.TextDocument, range: vscode.Range, selectedClusterId: string | undefined): LaunchConsumerCommand {
