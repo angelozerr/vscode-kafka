@@ -5,6 +5,7 @@ import * as vscode from "vscode";
 
 import { getWorkspaceSettings, InitialConsumerOffset, ClusterSettings } from "../settings";
 import { ConnectionOptions, createKafka } from "./client";
+import { types } from "avsc";
 
 interface ConsumerOptions extends ConnectionOptions {
     consumerGroupId: string;
@@ -93,6 +94,13 @@ class Consumer implements vscode.Disposable {
 
         this.consumer.run({
             eachMessage: async ({ topic, partition, message }) => {
+
+
+                const longType = types.LongType;
+                message.key = new longType().decode(message.key).value;
+                if (message.value) {
+                    message.value = new longType().decode(message.value).value;
+                }
                 this.onDidReceiveMessageEmitter.fire({
                     uri: this.uri,
                     record: { topic: topic, partition: partition, ...message },

@@ -425,7 +425,8 @@
         "fs-extra": "^8.1.0",
         "glob": "^7.1.6",
         "js-yaml": "^3.14.0",
-        "kafkajs": "^1.15.0"
+        "kafkajs": "^1.15.0",
+        "avsc": "^5.5.3"
     },
     "devDependencies": {
         "@types/faker": "^5.1.5",
