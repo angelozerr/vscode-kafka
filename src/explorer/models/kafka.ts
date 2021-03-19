@@ -1,4 +1,5 @@
 import { Disposable, TreeItemCollapsibleState } from "vscode";
+import { KafkaExplorer } from "..";
 import { ClientAccessor } from "../../client";
 import { ClusterSettings } from "../../settings";
 import { ClusterItem } from "./cluster";
@@ -11,7 +12,8 @@ export class KafkaModel extends NodeBase implements Disposable {
 
     constructor(
         public readonly clusterSettings: ClusterSettings,
-        protected clientAccessor: ClientAccessor) {
+        protected clientAccessor: ClientAccessor,
+        public explorer: KafkaExplorer) {
         super(undefined);
     }
 

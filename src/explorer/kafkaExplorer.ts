@@ -50,9 +50,12 @@ export class KafkaExplorer implements vscode.Disposable, vscode.TreeDataProvider
         // reset the kafka model
         this.root = null;
         // refresh the treeview
-        this.onDidChangeTreeDataEvent.fire(undefined);
+        this.refreshItem(undefined);
     }
 
+    public refreshItem(item: NodeBase | undefined): void {
+        this.onDidChangeTreeDataEvent.fire(item);
+    }
     public show(): void {
         vscode.commands.executeCommand(`${TREEVIEW_ID}.focus`);
     }
@@ -64,7 +67,7 @@ export class KafkaExplorer implements vscode.Disposable, vscode.TreeDataProvider
     async getChildren(element?: NodeBase): Promise<NodeBase[]> {
         if (!element) {
             if (!this.root) {
-                this.root = new KafkaModel(this.clusterSettings, this.clientAccessor);
+                this.root = new KafkaModel(this.clusterSettings, this.clientAccessor, this);
             }
             element = this.root;
         }
@@ -176,7 +179,7 @@ export class KafkaExplorer implements vscode.Disposable, vscode.TreeDataProvider
         }
         const clusterItem = await this.root?.findClusterItemById(clusterId);
         if (clusterItem !== undefined) {
-            this.onDidChangeTreeDataEvent.fire(clusterItem);
+            this.refreshItem(clusterItem);
         }
     }
 

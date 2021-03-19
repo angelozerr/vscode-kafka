@@ -8,13 +8,15 @@ import { TopicGroupItem, TopicItem } from "./topics";
 import { ConsumerGroupsItem } from "./consumerGroups";
 import { KafkaModel } from "./kafka";
 import { Disposable } from "vscode";
-import { GlyphChars } from "../../constants";
+import { GlyphChars, Icons } from "../../constants";
 
 const TOPIC_INDEX = 1;
 
 export class ClusterItem extends NodeBase implements Disposable {
     public contextValue = "cluster";
     public collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
+
+    public iconPath = Icons.ClusterDisconnected;
 
     constructor(private clientAccessor: ClientAccessor, public readonly cluster: Cluster, parent: KafkaModel) {
         super(parent);
@@ -24,6 +26,29 @@ export class ClusterItem extends NodeBase implements Disposable {
 
     public get client(): Client {
         return this.clientAccessor.get(this.cluster.id);
+    }
+
+    async getChildren(): Promise<NodeBase[]> {
+        try {
+            this.description = this.cluster.bootstrap;
+            this.iconPath = Icons.ClusterConnecting;
+            this.getParent().explorer.refreshItem(this);
+           await this.client.connect();
+           this.iconPath = Icons.ClusterConnected;
+            this.getParent().explorer.refreshItem(this);
+        }
+        catch (e) {
+            this.iconPath = Icons.ClusterError;
+            this.description = e.message;
+            //this.getParent().explorer.refreshItem(this);
+            //return [new ErrorItem(e.message, this)];
+            //throw e;
+            return [];
+        }
+        if (!this.children) {
+            this.children = await this.computeChildren();
+        }
+        return this.children;
     }
 
     async computeChildren(): Promise<NodeBase[]> {

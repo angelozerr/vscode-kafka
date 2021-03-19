@@ -47,6 +47,22 @@ export class Icons {
     public static get Information(): DarkLightPath {
         return getDarkLightPath("information.svg");
     }
+
+    public static get ClusterDisconnected(): DarkLightPath {
+        return getDarkLightPath("cluster-disconnected.svg");
+    }
+
+    public static get ClusterConnecting(): DarkLightPath {
+        return getDarkLightPath("cluster-connecting.svg");
+    }
+
+    public static get ClusterConnected(): DarkLightPath {
+        return getDarkLightPath("cluster-connected.svg");
+    }
+
+    public static get ClusterError(): DarkLightPath {
+        return getDarkLightPath("cluster-error.svg");
+    }
 }
 
 
