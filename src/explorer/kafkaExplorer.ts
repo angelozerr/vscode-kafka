@@ -63,10 +63,7 @@ export class KafkaExplorer implements vscode.Disposable, vscode.TreeDataProvider
 
     async getChildren(element?: NodeBase): Promise<NodeBase[]> {
         if (!element) {
-            if (!this.root) {
-                this.root = new KafkaModel(this.clusterSettings, this.clientAccessor);
-            }
-            element = this.root;
+            element = this.getDataModel();
         }
         return element.getChildren();
     }
@@ -178,6 +175,19 @@ export class KafkaExplorer implements vscode.Disposable, vscode.TreeDataProvider
         if (clusterItem !== undefined) {
             this.onDidChangeTreeDataEvent.fire(clusterItem);
         }
+    }
+
+
+    /**
+     * Returns the kafka data model.
+     *
+     * @returns  the kafka data model.
+     */
+    public getDataModel(): KafkaModel {
+        if (!this.root) {
+            this.root = new KafkaModel(this.clusterSettings, this.clientAccessor);
+        }
+        return this.root;
     }
 
 }
