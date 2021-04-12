@@ -136,7 +136,7 @@ export class Property extends BaseNode {
 
 export abstract class Block extends ChildrenNode<Property | Chunk> {
 
-    constructor(public readonly type: BlockType, start: Position, end: Position) {
+    constructor(public readonly type: BlockType, start: Position, end: Position, public readonly allowedPropertyNames: string[]) {
         super(start, end, type === BlockType.consumer ? NodeKind.consumerBlock : NodeKind.producerBlock);
     }
 
@@ -157,11 +157,13 @@ export abstract class Block extends ChildrenNode<Property | Chunk> {
 }
 
 export class ProducerBlock extends Block {
+
     public value: Chunk | undefined;
 
     constructor(start: Position, end: Position) {
-        super(BlockType.producer, start, end);
+        super(BlockType.producer, start, end, ["topic:", "key:", "key-format:", "value-format:"]);
     }
+
 }
 
 export class ConsumerBlock extends Block {
@@ -169,7 +171,7 @@ export class ConsumerBlock extends Block {
     public consumerGroupId: Chunk | undefined;
 
     constructor(start: Position, end: Position) {
-        super(BlockType.consumer, start, end);
+        super(BlockType.consumer, start, end, ["topic:", "from:", "key-format:", "value-format:", "partitions:"]);
     }
 }
 
@@ -286,7 +288,7 @@ function parseProducerBlock(block: ProducerBlock, document: TextDocument) {
             continue;
         }
 
-        if (startsWith(lineText, ["topic:", "key:", "key-format:", "value-format:"])) {
+        if (startsWith(lineText, block.allowedPropertyNames)) {
             // Known properties
             block.addChild(createProperty(lineText, currentLine, block));
             continue;
